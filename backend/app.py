@@ -3,7 +3,8 @@ from models import db, User, Stream, Log, Assignment, ChatKeyword, FlaggedObject
 from notifications import send_notification
 from detection import visual, audio, chat
 from functools import wraps
-import threading, time
+import threading
+import time
 from datetime import timedelta
 
 app = Flask(__name__)
@@ -74,12 +75,15 @@ def assign_stream():
     stream_id = data.get('stream_id')
     if not agent_id or not stream_id:
         return jsonify({'message': 'Agent and Stream are required'}), 400
+
     stream = Stream.query.get(stream_id)
     if not stream:
         return jsonify({'message': 'Stream not found'}), 404
-    # Prevent duplicate assignment:
+
+    # Prevent duplicate assignment
     if Assignment.query.filter_by(agent_id=agent_id, stream_id=stream.id).first():
         return jsonify({'message': 'This stream is already assigned to this agent'}), 400
+
     assignment = Assignment(agent_id=agent_id, stream_id=stream.id)
     db.session.add(assignment)
     db.session.commit()
@@ -89,7 +93,12 @@ def assign_stream():
 @login_required()
 def get_logs():
     logs = Log.query.all()
-    return jsonify([{'id': log.id, 'timestamp': log.timestamp, 'stream_url': log.stream_url, 'event_type': log.event_type} for log in logs])
+    return jsonify([{
+        'id': log.id,
+        'timestamp': log.timestamp,
+        'stream_url': log.stream_url,
+        'event_type': log.event_type
+    } for log in logs])
 
 # --- CRUD for Agents ---
 @app.route('/api/agents', methods=['GET'])
@@ -108,10 +117,14 @@ def create_agent():
         return jsonify({'message': 'Username and password required'}), 400
     if User.query.filter_by(username=username).first():
         return jsonify({'message': 'Username already exists'}), 400
+
     new_agent = User(username=username, password=password, role='agent')
     db.session.add(new_agent)
     db.session.commit()
-    return jsonify({'message': 'Agent created successfully', 'agent': {'id': new_agent.id, 'username': new_agent.username}}), 201
+    return jsonify({
+        'message': 'Agent created successfully',
+        'agent': {'id': new_agent.id, 'username': new_agent.username}
+    }), 201
 
 @app.route('/api/agents/<int:agent_id>', methods=['PUT'])
 @login_required(role='admin')
@@ -120,6 +133,7 @@ def update_agent(agent_id):
     agent = User.query.filter_by(id=agent_id, role='agent').first()
     if not agent:
         return jsonify({'message': 'Agent not found'}), 404
+
     if 'username' in data and data['username'].strip():
         agent.username = data['username'].strip()
     if 'password' in data and data['password'].strip():
@@ -142,21 +156,34 @@ def delete_agent(agent_id):
 @login_required(role='admin')
 def get_streams():
     streams = Stream.query.all()
-    return jsonify([{'id': stream.id, 'url': stream.url} for stream in streams])
+    return jsonify([{
+        'id': stream.id,
+        'url': stream.url,
+        'platform': stream.platform
+    } for stream in streams])
 
 @app.route('/api/streams', methods=['POST'])
 @login_required(role='admin')
 def create_stream():
     data = request.get_json() or {}
     url = data.get('url', '').strip()
+    platform = data.get('platform', 'Chaturbate').strip()  # default to Chaturbate
     if not url:
         return jsonify({'message': 'Stream URL required'}), 400
     if Stream.query.filter_by(url=url).first():
         return jsonify({'message': 'Stream already exists'}), 400
-    new_stream = Stream(url=url)
+
+    new_stream = Stream(url=url, platform=platform)
     db.session.add(new_stream)
     db.session.commit()
-    return jsonify({'message': 'Stream created successfully', 'stream': {'id': new_stream.id, 'url': new_stream.url}}), 201
+    return jsonify({
+        'message': 'Stream created successfully',
+        'stream': {
+            'id': new_stream.id,
+            'url': new_stream.url,
+            'platform': new_stream.platform
+        }
+    }), 201
 
 @app.route('/api/streams/<int:stream_id>', methods=['PUT'])
 @login_required(role='admin')
@@ -165,8 +192,12 @@ def update_stream(stream_id):
     stream = Stream.query.get(stream_id)
     if not stream:
         return jsonify({'message': 'Stream not found'}), 404
+
     if 'url' in data and data['url'].strip():
         stream.url = data['url'].strip()
+    if 'platform' in data and data['platform'].strip():
+        stream.platform = data['platform'].strip()
+
     db.session.commit()
     return jsonify({'message': 'Stream updated successfully'})
 
@@ -196,10 +227,14 @@ def create_keyword():
         return jsonify({'message': 'Keyword required'}), 400
     if ChatKeyword.query.filter_by(keyword=keyword).first():
         return jsonify({'message': 'Keyword already exists'}), 400
+
     new_keyword = ChatKeyword(keyword=keyword)
     db.session.add(new_keyword)
     db.session.commit()
-    return jsonify({'message': 'Keyword added successfully', 'keyword': {'id': new_keyword.id, 'keyword': new_keyword.keyword}}), 201
+    return jsonify({
+        'message': 'Keyword added successfully',
+        'keyword': {'id': new_keyword.id, 'keyword': new_keyword.keyword}
+    }), 201
 
 @app.route('/api/keywords/<int:keyword_id>', methods=['PUT'])
 @login_required(role='admin')
@@ -240,10 +275,14 @@ def create_object():
         return jsonify({'message': 'Object name required'}), 400
     if FlaggedObject.query.filter_by(object_name=object_name).first():
         return jsonify({'message': 'Object already exists'}), 400
+
     new_object = FlaggedObject(object_name=object_name)
     db.session.add(new_object)
     db.session.commit()
-    return jsonify({'message': 'Flagged object added successfully', 'object': {'id': new_object.id, 'object_name': new_object.object_name}}), 201
+    return jsonify({
+        'message': 'Flagged object added successfully',
+        'object': {'id': new_object.id, 'object_name': new_object.object_name}
+    }), 201
 
 @app.route('/api/objects/<int:object_id>', methods=['PUT'])
 @login_required(role='admin')
@@ -309,12 +348,37 @@ def get_agent_dashboard():
     ongoing_streams = len(set([item["stream_id"] for item in dashboard_data]))
     return jsonify({"ongoing_streams": ongoing_streams, "assignments": dashboard_data})
 
-# --- Monitor stream (simulate AI detection) ---
+# --- Additional Testing Endpoint for toggles (optional) ---
+@app.route('/api/test', methods=['POST'])
+@login_required(role='admin')
+def test_features():
+    """
+    A dummy endpoint to simulate testing toggles for Visual AI, Audio AI, Chat AI, and Notifications.
+    The request body might look like:
+    {
+      "visual_ai": true,
+      "audio_ai": false,
+      "chat_ai": true,
+      "notifications": true
+    }
+    We then return a simple message verifying these toggles.
+    """
+    data = request.get_json() or {}
+    visual_ai = data.get('visual_ai', False)
+    audio_ai = data.get('audio_ai', False)
+    chat_ai = data.get('chat_ai', False)
+    notifications = data.get('notifications', False)
+
+    response_msg = f"Testing toggles: VisualAI={visual_ai}, AudioAI={audio_ai}, ChatAI={chat_ai}, Notifications={notifications}"
+    return jsonify({"message": response_msg})
+
 def monitor_stream(stream_url):
     while True:
+        # The real AI detection calls:
         visual_result = visual.detect(stream_url)
         audio_result = audio.detect(stream_url)
         chat_result = chat.detect(stream_url)
+
         events = []
         if visual_result:
             events.append(('visual', visual_result))
@@ -322,12 +386,14 @@ def monitor_stream(stream_url):
             events.append(('audio', audio_result))
         if chat_result:
             events.append(('chat', chat_result))
+
         for event_type, result in events:
             log = Log(stream_url=stream_url, event_type=event_type)
             db.session.add(log)
             db.session.commit()
             send_notification(f"{event_type} alert on {stream_url}: {result}")
-        time.sleep(10)
+
+        time.sleep(10)  # Check every 10 seconds
 
 def start_monitoring():
     assignments = Assignment.query.all()

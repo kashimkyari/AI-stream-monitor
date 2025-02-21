@@ -12,6 +12,8 @@ class User(db.Model):
 class Stream(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     url = db.Column(db.String(200), unique=True, nullable=False)
+    # Accommodate Chaturbate or Stripchat
+    platform = db.Column(db.String(50), default='Chaturbate')
 
 class Assignment(db.Model):
     id = db.Column(db.Integer, primary_key=True)

@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import VideoPlayer from './VideoPlayer';
+import TestingTab from './TestingTab';
+
+// ...
+
 
 const AdminPanel = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -102,7 +106,7 @@ const AdminPanel = () => {
       alert(res.data.message);
       fetchDashboard();
     } catch (err) {
-      alert(err.response.data.message || 'Assignment failed.');
+      alert(err.response?.data?.message || 'Assignment failed.');
     }
   };
 
@@ -314,6 +318,7 @@ const AdminPanel = () => {
             <div className="assignment-grid">
               {dashboardData.assignments.map((assignment) => (
                 <div key={assignment.assignment_id} className="assignment-card" onClick={() => setSelectedStreamUrl(assignment.stream_url)}>
+                  {/* VIDEO PLAYER THUMBNAIL */}
                   <video
                     src={assignment.stream_url}
                     muted
@@ -437,6 +442,11 @@ const AdminPanel = () => {
           </table>
         </div>
       )}
+{activeTab === 'test' && (
+  <div className="tab-content">
+    <TestingTab />
+  </div>
+)}
 
       {activeTab === 'flag' && (
         <div className="tab-content">
