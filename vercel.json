@@ -25,7 +25,8 @@
     }
   ],
   "env": {
-    "SECRET_KEY": "supersecretkey"
+    "SECRET_KEY": "supersecretkey",
+    "NODE_OPTIONS": "--openssl-legacy-provider"
   }
 }
 
