@@ -50,7 +50,6 @@ const ScraperPage = () => {
   const handleAddStream = async () => {
     setError('');
     try {
-      // Use the scraped room_url and set platform to 'Chaturbate'
       const payload = {
         room_url: scrapeResult.room_url,
         platform: 'Chaturbate'
@@ -68,7 +67,7 @@ const ScraperPage = () => {
       <div className="scrape-form">
         <input
           type="text"
-          placeholder="Enter Chaturbate room URL (e.g., https://chaturbate.com/caylin/)"
+          placeholder="Enter Chaturbate room URL (e.g., https://chaturbate.com/cutefacebigass/)"
           value={roomUrl}
           onChange={(e) => setRoomUrl(e.target.value)}
         />

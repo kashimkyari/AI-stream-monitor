@@ -6,9 +6,9 @@ import ScraperPage from './ScraperPage'; // For interactive scraping
 const AdminPanel = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   
-  // Dashboard data returned by the /api/dashboard endpoint
+  // Dashboard data with stream details
   const [dashboardData, setDashboardData] = useState({ ongoing_streams: 0, streams: [] });
-  const [selectedStream, setSelectedStream] = useState(null);
+  const [selectedAssignment, setSelectedAssignment] = useState(null);
 
   // For assignment dropdowns
   const [agentList, setAgentList] = useState([]);
@@ -22,7 +22,7 @@ const AdminPanel = () => {
   const [agentMsg, setAgentMsg] = useState('');
   const [agentError, setAgentError] = useState('');
   
-  // For Streams management – now only requires room URL and platform
+  // For Streams management – now only room URL and platform
   const [streams, setStreams] = useState([]);
   const [newStream, setNewStream] = useState({ room_url: '', platform: 'Chaturbate' });
   const [streamMsg, setStreamMsg] = useState('');
@@ -289,7 +289,7 @@ const AdminPanel = () => {
   }, [activeTab]);
 
   // Modal for enlarged stream view
-  const closeModal = () => setSelectedStream(null);
+  const closeModal = () => setSelectedAssignment(null);
 
   return (
     <div className="admin-panel">
@@ -310,8 +310,11 @@ const AdminPanel = () => {
             <p><strong>Ongoing Streams:</strong> {dashboardData.ongoing_streams}</p>
             <div className="assignment-grid">
               {dashboardData.streams.map((stream) => (
-                <div key={stream.stream_id} className="assignment-card" onClick={() => setSelectedStream(stream)}>
-                  <VideoPlayer room_url={stream.room_url} streamer_username={stream.streamer_username} thumbnail={true} />
+                <div key={stream.stream_id} className="assignment-card" onClick={() => setSelectedAssignment(stream)}>
+                  <VideoPlayer
+                    room_url={stream.room_url}
+                    streamer_username={stream.streamer_username}
+                  />
                   <div className="assignment-details">
                     <p><strong>Stream:</strong> {stream.stream_id}</p>
                     <p><strong>Agent:</strong> {stream.agent_username}</p>
@@ -396,7 +399,7 @@ const AdminPanel = () => {
           <div className="form-container">
             <input
               type="text"
-              placeholder="Room URL (e.g., https://chaturbate.com/caylin/)"
+              placeholder="Room URL (e.g., https://chaturbate.com/cutefacebigass/)"
               value={newStream.room_url}
               onChange={(e) => setNewStream({ ...newStream, room_url: e.target.value })}
             />
@@ -522,16 +525,19 @@ const AdminPanel = () => {
         </div>
       )}
 
-      {selectedStream && (
+      {selectedAssignment && (
         <div className="modal-overlay" onClick={closeModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <button className="close-button" onClick={closeModal}>X</button>
             <h3>Stream Details</h3>
-            <p><strong>Stream ID:</strong> {selectedStream.stream_id}</p>
-            <p><strong>Agent:</strong> {selectedStream.agent_username}</p>
-            <p><strong>Platform:</strong> {selectedStream.platform || 'Chaturbate'}</p>
-            <p><strong>Streamer:</strong> {selectedStream.streamer_username}</p>
-            <VideoPlayer room_url={selectedStream.room_url} streamer_username={selectedStream.streamer_username} />
+            <p><strong>Stream ID:</strong> {selectedAssignment.stream_id}</p>
+            <p><strong>Agent:</strong> {selectedAssignment.agent_username}</p>
+            <p><strong>Platform:</strong> {selectedAssignment.platform || 'Chaturbate'}</p>
+            <p><strong>Streamer:</strong> {selectedAssignment.streamer_username}</p>
+            <VideoPlayer
+              room_url={selectedAssignment.room_url}
+              streamer_username={selectedAssignment.streamer_username}
+            />
           </div>
         </div>
       )}

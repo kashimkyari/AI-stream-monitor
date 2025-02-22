@@ -307,7 +307,7 @@ def delete_object(object_id):
     db.session.commit()
     return jsonify({'message': 'Flagged object deleted successfully'})
 
-# --- Dashboard endpoint for admin (returns all streams) ---
+# --- Dashboard endpoint for admin ---
 @app.route('/api/dashboard', methods=['GET'])
 @login_required(role='admin')
 def get_dashboard():
