@@ -57,15 +57,7 @@ const AgentDashboard = () => {
         <div className="assignment-grid">
           {dashboardData.assignments.map((assignment) => (
             <div key={assignment.assignment_id} className="assignment-card" onClick={() => setSelectedAssignment(assignment)}>
-              <video
-                src={assignment.stream_url}
-                muted
-                loop
-                playsInline
-                width="150"
-                height="150"
-                style={{ borderRadius: "4px", objectFit: "cover" }}
-              />
+              <VideoPlayer room_url={assignment.room_url} streamer_username={assignment.streamer_username} />
               <div className="assignment-details">
                 <p>Stream {assignment.stream_id}</p>
               </div>
@@ -120,7 +112,7 @@ const AgentDashboard = () => {
             <p><strong>Agent:</strong> {selectedAssignment.agent_username}</p>
             <p><strong>Platform:</strong> {selectedAssignment.platform || 'Chaturbate'}</p>
             <p><strong>Streamer:</strong> {selectedAssignment.streamer_username}</p>
-            <VideoPlayer streamUrl={selectedAssignment.stream_url} />
+            <VideoPlayer room_url={selectedAssignment.room_url} streamer_username={selectedAssignment.streamer_username} />
           </div>
         </div>
       )}

@@ -1,27 +1,40 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import VideoPlayer from './VideoPlayer';
+import ScraperPage from './ScraperPage'; // For interactive scraping
 
 const AdminPanel = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [dashboardData, setDashboardData] = useState({ ongoing_streams: 0, assignments: [] });
-  const [selectedAssignment, setSelectedAssignment] = useState(null);
+  
+  // Dashboard data returned by the /api/dashboard endpoint
+  const [dashboardData, setDashboardData] = useState({ ongoing_streams: 0, streams: [] });
+  const [selectedStream, setSelectedStream] = useState(null);
+
+  // For assignment dropdowns
   const [agentList, setAgentList] = useState([]);
   const [streamList, setStreamList] = useState([]);
   const [selectedAgentId, setSelectedAgentId] = useState('');
   const [selectedStreamId, setSelectedStreamId] = useState('');
+
+  // For Agents management
   const [agents, setAgents] = useState([]);
   const [newAgent, setNewAgent] = useState({ username: '', password: '' });
   const [agentMsg, setAgentMsg] = useState('');
   const [agentError, setAgentError] = useState('');
+  
+  // For Streams management – now only requires room URL and platform
   const [streams, setStreams] = useState([]);
-  const [newStream, setNewStream] = useState({ room_url: '', url: '', platform: 'Chaturbate' });
+  const [newStream, setNewStream] = useState({ room_url: '', platform: 'Chaturbate' });
   const [streamMsg, setStreamMsg] = useState('');
   const [streamError, setStreamError] = useState('');
+  
+  // For Flag Settings (Chat Keywords)
   const [chatKeywords, setChatKeywords] = useState([]);
   const [newChatKeyword, setNewChatKeyword] = useState('');
   const [keywordMsg, setKeywordMsg] = useState('');
   const [keywordError, setKeywordError] = useState('');
+
+  // For Flag Settings (Flagged Objects)
   const [flaggedObjects, setFlaggedObjects] = useState([]);
   const [newFlaggedObject, setNewFlaggedObject] = useState('');
   const [objectMsg, setObjectMsg] = useState('');
@@ -147,33 +160,21 @@ const AdminPanel = () => {
     }
   };
 
-  // --- Create Stream with room URL and buffer URL
+  // --- Create Stream: now only requires room URL and platform
   const handleCreateStream = async () => {
     setStreamError('');
     setStreamMsg('');
-    if (!newStream.room_url.trim() || !newStream.url.trim()) {
-      setStreamError('Both room URL and buffer URL are required.');
+    if (!newStream.room_url.trim()) {
+      setStreamError('Room URL is required.');
       return;
     }
     try {
       const res = await axios.post('/api/streams', newStream);
       setStreamMsg(res.data.message);
-      setNewStream({ room_url: '', url: '', platform: 'Chaturbate' });
+      setNewStream({ room_url: '', platform: 'Chaturbate' });
       fetchStreams();
     } catch (error) {
       setStreamError(error.response?.data.message || 'Error creating stream.');
-    }
-  };
-
-  const handleEditStreamUrl = async (streamId, currentUrl) => {
-    const newUrl = prompt("Enter new buffer URL (must start with blob:)", currentUrl);
-    if (newUrl && newUrl.trim() !== currentUrl) {
-      try {
-        await axios.put(`/api/streams/${streamId}`, { url: newUrl });
-        fetchStreams();
-      } catch (error) {
-        console.error('Error updating stream URL:', error);
-      }
     }
   };
 
@@ -287,7 +288,8 @@ const AdminPanel = () => {
     }
   }, [activeTab]);
 
-  const closeModal = () => setSelectedAssignment(null);
+  // Modal for enlarged stream view
+  const closeModal = () => setSelectedStream(null);
 
   return (
     <div className="admin-panel">
@@ -298,6 +300,7 @@ const AdminPanel = () => {
         <button onClick={() => setActiveTab('agents')} className={activeTab === 'agents' ? 'active' : ''}>Agents</button>
         <button onClick={() => setActiveTab('streams')} className={activeTab === 'streams' ? 'active' : ''}>Streams</button>
         <button onClick={() => setActiveTab('flag')} className={activeTab === 'flag' ? 'active' : ''}>Flag Settings</button>
+        <button onClick={() => setActiveTab('scraper')} className={activeTab === 'scraper' ? 'active' : ''}>Scraper</button>
       </div>
 
       {activeTab === 'dashboard' && (
@@ -306,21 +309,13 @@ const AdminPanel = () => {
           <div className="dashboard-info">
             <p><strong>Ongoing Streams:</strong> {dashboardData.ongoing_streams}</p>
             <div className="assignment-grid">
-              {dashboardData.assignments.map((assignment) => (
-                <div key={assignment.assignment_id} className="assignment-card" onClick={() => setSelectedAssignment(assignment)}>
-                  <video
-                    src={assignment.stream_url}
-                    muted
-                    loop
-                    playsInline
-                    width="150"
-                    height="150"
-                    style={{ borderRadius: "4px", objectFit: "cover" }}
-                  />
+              {dashboardData.streams.map((stream) => (
+                <div key={stream.stream_id} className="assignment-card" onClick={() => setSelectedStream(stream)}>
+                  <VideoPlayer room_url={stream.room_url} streamer_username={stream.streamer_username} thumbnail={true} />
                   <div className="assignment-details">
-                    <p><strong>Stream:</strong> {assignment.stream_id}</p>
-                    <p><strong>Agent:</strong> {assignment.agent_username}</p>
-                    <p><strong>Streamer:</strong> {assignment.streamer_username}</p>
+                    <p><strong>Stream:</strong> {stream.stream_id}</p>
+                    <p><strong>Agent:</strong> {stream.agent_username}</p>
+                    <p><strong>Streamer:</strong> {stream.streamer_username}</p>
                   </div>
                 </div>
               ))}
@@ -341,7 +336,7 @@ const AdminPanel = () => {
             <select value={selectedStreamId} onChange={(e) => setSelectedStreamId(e.target.value)}>
               {streamList.map((stream) => (
                 <option key={stream.id} value={stream.id}>
-                  ID: {stream.id} - {stream.url} ({stream.platform})
+                  ID: {stream.id} - {stream.room_url} ({stream.platform})
                 </option>
               ))}
             </select>
@@ -405,12 +400,6 @@ const AdminPanel = () => {
               value={newStream.room_url}
               onChange={(e) => setNewStream({ ...newStream, room_url: e.target.value })}
             />
-            <input
-              type="text"
-              placeholder="Buffer URL (blob:...)"
-              value={newStream.url}
-              onChange={(e) => setNewStream({ ...newStream, url: e.target.value })}
-            />
             <select
               value={newStream.platform}
               onChange={(e) => setNewStream({ ...newStream, platform: e.target.value })}
@@ -427,7 +416,6 @@ const AdminPanel = () => {
               <tr>
                 <th>ID</th>
                 <th>Room URL</th>
-                <th>Buffer URL</th>
                 <th>Platform</th>
                 <th>Streamer</th>
                 <th>Actions</th>
@@ -438,11 +426,9 @@ const AdminPanel = () => {
                 <tr key={stream.id}>
                   <td>{stream.id}</td>
                   <td>{stream.room_url}</td>
-                  <td>{stream.url}</td>
                   <td>{stream.platform}</td>
                   <td>{stream.streamer_username}</td>
                   <td>
-                    <button onClick={() => handleEditStreamUrl(stream.id, stream.url)}>Edit Buffer URL</button>
                     <button onClick={() => handleDeleteStream(stream.id)}>Delete</button>
                   </td>
                 </tr>
@@ -529,16 +515,23 @@ const AdminPanel = () => {
         </div>
       )}
 
-      {selectedAssignment && (
+      {activeTab === 'scraper' && (
+        <div className="tab-content">
+          <h3>Scraper</h3>
+          <ScraperPage />
+        </div>
+      )}
+
+      {selectedStream && (
         <div className="modal-overlay" onClick={closeModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <button className="close-button" onClick={closeModal}>X</button>
             <h3>Stream Details</h3>
-            <p><strong>Stream ID:</strong> {selectedAssignment.stream_id}</p>
-            <p><strong>Agent:</strong> {selectedAssignment.agent_username}</p>
-            <p><strong>Platform:</strong> {selectedAssignment.platform || 'Chaturbate'}</p>
-            <p><strong>Streamer:</strong> {selectedAssignment.streamer_username}</p>
-            <VideoPlayer streamUrl={selectedAssignment.stream_url} />
+            <p><strong>Stream ID:</strong> {selectedStream.stream_id}</p>
+            <p><strong>Agent:</strong> {selectedStream.agent_username}</p>
+            <p><strong>Platform:</strong> {selectedStream.platform || 'Chaturbate'}</p>
+            <p><strong>Streamer:</strong> {selectedStream.streamer_username}</p>
+            <VideoPlayer room_url={selectedStream.room_url} streamer_username={selectedStream.streamer_username} />
           </div>
         </div>
       )}
@@ -550,7 +543,7 @@ const AdminPanel = () => {
           padding: 20px;
           background: #fff;
           border-radius: 8px;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
           font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
           animation: slideUp 0.5s ease-out;
         }
@@ -640,7 +633,7 @@ const AdminPanel = () => {
           transition: box-shadow 0.3s ease, transform 0.3s ease;
         }
         .assignment-card:hover {
-          box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+          box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
           transform: scale(1.03);
         }
         .assignment-details {
@@ -658,7 +651,7 @@ const AdminPanel = () => {
           left: 0;
           width: 100%;
           height: 100%;
-          background: rgba(0,0,0,0.6);
+          background: rgba(0, 0, 0, 0.6);
           display: flex;
           align-items: center;
           justify-content: center;

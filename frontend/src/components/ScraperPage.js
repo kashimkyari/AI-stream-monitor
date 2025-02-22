@@ -1,12 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 
 const ScraperPage = () => {
   const [roomUrl, setRoomUrl] = useState('');
   const [scrapeResult, setScrapeResult] = useState(null);
-  const [bufferUrl, setBufferUrl] = useState('');
-  const [addMsg, setAddMsg] = useState('');
   const [error, setError] = useState('');
+  const [progress, setProgress] = useState(0);
+  const progressInterval = useRef(null);
+
+  const startProgress = () => {
+    setProgress(0);
+    progressInterval.current = setInterval(() => {
+      setProgress(prev => (prev < 90 ? prev + 10 : prev));
+    }, 300);
+  };
+
+  const stopProgress = () => {
+    if (progressInterval.current) {
+      clearInterval(progressInterval.current);
+      progressInterval.current = null;
+    }
+    setProgress(100);
+  };
 
   const handleScrape = async () => {
     setError('');
@@ -15,33 +30,33 @@ const ScraperPage = () => {
       setError('Please enter a room URL.');
       return;
     }
+    startProgress();
     try {
       const res = await axios.post('/api/scrape', { room_url: roomUrl });
+      stopProgress();
       setScrapeResult(res.data);
     } catch (err) {
+      stopProgress();
       setError(err.response?.data?.message || 'Error scraping the URL.');
     }
   };
 
+  useEffect(() => {
+    return () => {
+      if (progressInterval.current) clearInterval(progressInterval.current);
+    };
+  }, []);
+
   const handleAddStream = async () => {
     setError('');
-    setAddMsg('');
-    if (!bufferUrl.trim()) {
-      setError('Please enter a buffer URL.');
-      return;
-    }
-    if (!scrapeResult) {
-      setError('No scraped data available.');
-      return;
-    }
     try {
+      // Use the scraped room_url and set platform to 'Chaturbate'
       const payload = {
         room_url: scrapeResult.room_url,
-        url: bufferUrl.trim(),
         platform: 'Chaturbate'
       };
       const res = await axios.post('/api/streams', payload);
-      setAddMsg(res.data.message);
+      alert(res.data.message);
     } catch (err) {
       setError(err.response?.data?.message || 'Error adding stream.');
     }
@@ -59,22 +74,19 @@ const ScraperPage = () => {
         />
         <button onClick={handleScrape}>Scrape</button>
       </div>
+      {progress > 0 && progress < 100 && (
+        <div className="progress-container">
+          <div className="progress-bar" style={{ width: `${progress}%` }} />
+          <span>{progress}%</span>
+        </div>
+      )}
       {error && <p className="error">{error}</p>}
       {scrapeResult && (
         <div className="scrape-result">
           <p><strong>Room URL:</strong> {scrapeResult.room_url}</p>
           <p><strong>Streamer Username:</strong> {scrapeResult.streamer_username}</p>
           <p><strong>Page Title:</strong> {scrapeResult.page_title}</p>
-          <div className="buffer-form">
-            <input
-              type="text"
-              placeholder="Enter Buffer URL (blob:...)"
-              value={bufferUrl}
-              onChange={(e) => setBufferUrl(e.target.value)}
-            />
-            <button onClick={handleAddStream}>Add Stream</button>
-          </div>
-          {addMsg && <p className="success">{addMsg}</p>}
+          <button onClick={handleAddStream}>Add to Stream List</button>
         </div>
       )}
       <style jsx>{`
@@ -84,11 +96,11 @@ const ScraperPage = () => {
           padding: 20px;
           background: #fff;
           border-radius: 8px;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
           font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
           animation: fadeIn 0.5s ease-in-out;
         }
-        .scrape-form, .buffer-form {
+        .scrape-form {
           display: flex;
           gap: 10px;
           margin-bottom: 15px;
@@ -111,12 +123,31 @@ const ScraperPage = () => {
         button:hover {
           background: #0056b3;
         }
+        .progress-container {
+          margin: 10px 0;
+          background: #f0f0f0;
+          border-radius: 4px;
+          position: relative;
+          height: 20px;
+          overflow: hidden;
+        }
+        .progress-bar {
+          height: 100%;
+          background: #007bff;
+          transition: width 0.3s ease;
+        }
+        .progress-container span {
+          position: absolute;
+          width: 100%;
+          text-align: center;
+          top: 0;
+          left: 0;
+          font-size: 12px;
+          line-height: 20px;
+          color: #fff;
+        }
         .error {
           color: #d9534f;
-          text-align: center;
-        }
-        .success {
-          color: #28a745;
           text-align: center;
         }
         @keyframes fadeIn {

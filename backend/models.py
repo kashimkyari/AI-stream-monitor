@@ -11,8 +11,7 @@ class User(db.Model):
 
 class Stream(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    url = db.Column(db.String(200), unique=True, nullable=False)  # buffer URL (blob)
-    room_url = db.Column(db.String(300))  # room URL (e.g., https://chaturbate.com/username/)
+    room_url = db.Column(db.String(300), unique=True, nullable=False)  # e.g., https://chaturbate.com/streamer/
     platform = db.Column(db.String(50), default='Chaturbate')
     streamer_username = db.Column(db.String(100))  # parsed from room_url
 
@@ -26,7 +25,7 @@ class Assignment(db.Model):
 class Log(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    stream_url = db.Column(db.String(200))
+    room_url = db.Column(db.String(300))
     event_type = db.Column(db.String(50))
 
 class ChatKeyword(db.Model):
