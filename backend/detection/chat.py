@@ -1,34 +1,24 @@
-import random
 import spacy
+from spacy.matcher import Matcher
 
-# Attempt to load spaCy model
-try:
-    nlp = spacy.load("en_core_web_sm")
-except:
-    nlp = None
+nlp = spacy.load("en_core_web_sm")
+flagged_keywords = ["gun", "knife", "hate"]
+matcher = Matcher(nlp.vocab)
+for word in flagged_keywords:
+    pattern = [{"LOWER": word}]
+    matcher.add(word, [pattern])
 
 def detect(stream_url):
-    if not nlp:
-        # If spaCy isn't available, skip detection
-        return None
-
-    # Simulate chat messages
-    simulated_messages = [
-        "Hello from Chaturbate",
-        "This is a friendly chat on Stripchat",
-        "I see a knife in the background",
-        "No issues here",
-        "He has a gun, watch out!"
-    ]
-    message = random.choice(simulated_messages)
-
-    # In a real scenario, you'd fetch flagged keywords from DB
-    flagged_keywords = ["gun", "knife", "hate"]
-
-    doc = nlp(message)
-    # We'll just do a simple substring check
-    for kw in flagged_keywords:
-        if kw in message.lower():
-            return f"Chat flagged: {kw} in '{message}'"
+    # In a full implementation, you'd process live chat data.
+    # Here we simulate by processing a sample chat message.
+    sample_message = "I think there is a gun and a knife in this scene."
+    doc = nlp(sample_message)
+    matches = matcher(doc)
+    if matches:
+        detected = set()
+        for match_id, start, end in matches:
+            span = doc[start:end]
+            detected.add(span.text)
+        return f"Chat flagged: {', '.join(detected)} in message: '{sample_message}'"
     return None
 

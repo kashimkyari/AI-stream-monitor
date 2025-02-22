@@ -1,23 +1,23 @@
 from flask import Flask, request, jsonify, session
+from urllib.parse import urlparse
 from models import db, User, Stream, Log, Assignment, ChatKeyword, FlaggedObject
 from notifications import send_notification
 from detection import visual, audio, chat
 from functools import wraps
-import threading
-import time
+import threading, time
 from datetime import timedelta
+import requests
+from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///monitor.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = 'supersecretkey'
-# Session retention for 7 days
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
 db.init_app(app)
 
 with app.app_context():
     db.create_all()
-    # Create default admin and agent if they don't exist
     if not User.query.filter_by(username='admin').first():
         admin_user = User(username='admin', password='admin', role='admin')
         db.session.add(admin_user)
@@ -75,15 +75,11 @@ def assign_stream():
     stream_id = data.get('stream_id')
     if not agent_id or not stream_id:
         return jsonify({'message': 'Agent and Stream are required'}), 400
-
     stream = Stream.query.get(stream_id)
     if not stream:
         return jsonify({'message': 'Stream not found'}), 404
-
-    # Prevent duplicate assignment
     if Assignment.query.filter_by(agent_id=agent_id, stream_id=stream.id).first():
         return jsonify({'message': 'This stream is already assigned to this agent'}), 400
-
     assignment = Assignment(agent_id=agent_id, stream_id=stream.id)
     db.session.add(assignment)
     db.session.commit()
@@ -93,14 +89,12 @@ def assign_stream():
 @login_required()
 def get_logs():
     logs = Log.query.all()
-    return jsonify([{
-        'id': log.id,
-        'timestamp': log.timestamp,
-        'stream_url': log.stream_url,
-        'event_type': log.event_type
-    } for log in logs])
+    return jsonify([{'id': log.id,
+                     'timestamp': log.timestamp,
+                     'stream_url': log.stream_url,
+                     'event_type': log.event_type} for log in logs])
 
-# --- CRUD for Agents ---
+# --- CRUD for Agents (unchanged) ---
 @app.route('/api/agents', methods=['GET'])
 @login_required(role='admin')
 def get_agents():
@@ -117,14 +111,11 @@ def create_agent():
         return jsonify({'message': 'Username and password required'}), 400
     if User.query.filter_by(username=username).first():
         return jsonify({'message': 'Username already exists'}), 400
-
     new_agent = User(username=username, password=password, role='agent')
     db.session.add(new_agent)
     db.session.commit()
-    return jsonify({
-        'message': 'Agent created successfully',
-        'agent': {'id': new_agent.id, 'username': new_agent.username}
-    }), 201
+    return jsonify({'message': 'Agent created successfully',
+                    'agent': {'id': new_agent.id, 'username': new_agent.username}}), 201
 
 @app.route('/api/agents/<int:agent_id>', methods=['PUT'])
 @login_required(role='admin')
@@ -133,7 +124,6 @@ def update_agent(agent_id):
     agent = User.query.filter_by(id=agent_id, role='agent').first()
     if not agent:
         return jsonify({'message': 'Agent not found'}), 404
-
     if 'username' in data and data['username'].strip():
         agent.username = data['username'].strip()
     if 'password' in data and data['password'].strip():
@@ -151,7 +141,7 @@ def delete_agent(agent_id):
     db.session.commit()
     return jsonify({'message': 'Agent deleted successfully'})
 
-# --- CRUD for Streams ---
+# --- CRUD for Streams (updated to accept room_url and buffer URL) ---
 @app.route('/api/streams', methods=['GET'])
 @login_required(role='admin')
 def get_streams():
@@ -159,31 +149,43 @@ def get_streams():
     return jsonify([{
         'id': stream.id,
         'url': stream.url,
-        'platform': stream.platform
+        'room_url': stream.room_url,
+        'platform': stream.platform,
+        'streamer_username': stream.streamer_username
     } for stream in streams])
 
 @app.route('/api/streams', methods=['POST'])
 @login_required(role='admin')
 def create_stream():
     data = request.get_json() or {}
-    url = data.get('url', '').strip()
-    platform = data.get('platform', 'Chaturbate').strip()  # default to Chaturbate
-    if not url:
-        return jsonify({'message': 'Stream URL required'}), 400
+    url = data.get('url', '').strip()         # buffer URL (blob)
+    room_url = data.get('room_url', '').strip() # room URL
+    platform = data.get('platform', 'Chaturbate').strip()
+    if not url or not room_url:
+        return jsonify({'message': 'Both stream URL and room URL are required'}), 400
+    if platform.lower() == "chaturbate":
+        if "chaturbate.com" not in room_url:
+            return jsonify({'message': 'Invalid Chaturbate room URL'}), 400
+    elif platform.lower() == "stripchat":
+        if "stripchat.com" not in room_url:
+            return jsonify({'message': 'Invalid Stripchat room URL'}), 400
+    if not url.startswith("blob:"):
+        return jsonify({'message': 'Invalid buffer URL. Must start with "blob:"'}), 400
+    parts = [p for p in room_url.rstrip('/').split('/') if p]
+    streamer_username = parts[-1] if parts else ''
     if Stream.query.filter_by(url=url).first():
         return jsonify({'message': 'Stream already exists'}), 400
-
-    new_stream = Stream(url=url, platform=platform)
+    new_stream = Stream(url=url, room_url=room_url, platform=platform, streamer_username=streamer_username)
     db.session.add(new_stream)
     db.session.commit()
-    return jsonify({
-        'message': 'Stream created successfully',
-        'stream': {
-            'id': new_stream.id,
-            'url': new_stream.url,
-            'platform': new_stream.platform
-        }
-    }), 201
+    return jsonify({'message': 'Stream created successfully',
+                    'stream': {
+                        'id': new_stream.id,
+                        'url': new_stream.url,
+                        'room_url': new_stream.room_url,
+                        'platform': new_stream.platform,
+                        'streamer_username': new_stream.streamer_username
+                    }}), 201
 
 @app.route('/api/streams/<int:stream_id>', methods=['PUT'])
 @login_required(role='admin')
@@ -192,12 +194,25 @@ def update_stream(stream_id):
     stream = Stream.query.get(stream_id)
     if not stream:
         return jsonify({'message': 'Stream not found'}), 404
-
     if 'url' in data and data['url'].strip():
-        stream.url = data['url'].strip()
+        new_url = data['url'].strip()
+        if not new_url.startswith("blob:"):
+            return jsonify({'message': 'Invalid buffer URL. Must start with "blob:"'}), 400
+        stream.url = new_url
+    if 'room_url' in data and data['room_url'].strip():
+        new_room_url = data['room_url'].strip()
+        platform = data.get('platform', stream.platform).strip()
+        if platform.lower() == "chaturbate":
+            if "chaturbate.com" not in new_room_url:
+                return jsonify({'message': 'Invalid Chaturbate room URL'}), 400
+        elif platform.lower() == "stripchat":
+            if "stripchat.com" not in new_room_url:
+                return jsonify({'message': 'Invalid Stripchat room URL'}), 400
+        stream.room_url = new_room_url
+        parts = [p for p in new_room_url.rstrip('/').split('/') if p]
+        stream.streamer_username = parts[-1] if parts else ''
     if 'platform' in data and data['platform'].strip():
         stream.platform = data['platform'].strip()
-
     db.session.commit()
     return jsonify({'message': 'Stream updated successfully'})
 
@@ -211,7 +226,7 @@ def delete_stream(stream_id):
     db.session.commit()
     return jsonify({'message': 'Stream deleted successfully'})
 
-# --- CRUD for Chat Keywords ---
+# --- CRUD for Chat Keywords (unchanged) ---
 @app.route('/api/keywords', methods=['GET'])
 @login_required(role='admin')
 def get_keywords():
@@ -227,14 +242,11 @@ def create_keyword():
         return jsonify({'message': 'Keyword required'}), 400
     if ChatKeyword.query.filter_by(keyword=keyword).first():
         return jsonify({'message': 'Keyword already exists'}), 400
-
     new_keyword = ChatKeyword(keyword=keyword)
     db.session.add(new_keyword)
     db.session.commit()
-    return jsonify({
-        'message': 'Keyword added successfully',
-        'keyword': {'id': new_keyword.id, 'keyword': new_keyword.keyword}
-    }), 201
+    return jsonify({'message': 'Keyword added successfully',
+                    'keyword': {'id': new_keyword.id, 'keyword': new_keyword.keyword}}), 201
 
 @app.route('/api/keywords/<int:keyword_id>', methods=['PUT'])
 @login_required(role='admin')
@@ -259,7 +271,7 @@ def delete_keyword(keyword_id):
     db.session.commit()
     return jsonify({'message': 'Keyword deleted successfully'})
 
-# --- CRUD for Flagged Objects ---
+# --- CRUD for Flagged Objects (unchanged) ---
 @app.route('/api/objects', methods=['GET'])
 @login_required(role='admin')
 def get_objects():
@@ -275,14 +287,11 @@ def create_object():
         return jsonify({'message': 'Object name required'}), 400
     if FlaggedObject.query.filter_by(object_name=object_name).first():
         return jsonify({'message': 'Object already exists'}), 400
-
     new_object = FlaggedObject(object_name=object_name)
     db.session.add(new_object)
     db.session.commit()
-    return jsonify({
-        'message': 'Flagged object added successfully',
-        'object': {'id': new_object.id, 'object_name': new_object.object_name}
-    }), 201
+    return jsonify({'message': 'Flagged object added successfully',
+                    'object': {'id': new_object.id, 'object_name': new_object.object_name}}), 201
 
 @app.route('/api/objects/<int:object_id>', methods=['PUT'])
 @login_required(role='admin')
@@ -322,7 +331,9 @@ def get_dashboard():
                 "assignment_id": assignment.id,
                 "stream_id": stream.id,
                 "stream_url": stream.url,
-                "preview_url": preview_url,
+                "room_url": stream.room_url,
+                "platform": stream.platform,
+                "streamer_username": stream.streamer_username,
                 "agent_id": agent.id,
                 "agent_username": agent.username,
             })
@@ -343,42 +354,58 @@ def get_agent_dashboard():
                 "assignment_id": assignment.id,
                 "stream_id": stream.id,
                 "stream_url": stream.url,
+                "room_url": stream.room_url,
+                "platform": stream.platform,
+                "streamer_username": stream.streamer_username,
                 "preview_url": preview_url,
             })
     ongoing_streams = len(set([item["stream_id"] for item in dashboard_data]))
     return jsonify({"ongoing_streams": ongoing_streams, "assignments": dashboard_data})
 
-# --- Additional Testing Endpoint for toggles (optional) ---
+# --- Testing endpoint for feature toggles (optional) ---
 @app.route('/api/test', methods=['POST'])
 @login_required(role='admin')
 def test_features():
-    """
-    A dummy endpoint to simulate testing toggles for Visual AI, Audio AI, Chat AI, and Notifications.
-    The request body might look like:
-    {
-      "visual_ai": true,
-      "audio_ai": false,
-      "chat_ai": true,
-      "notifications": true
-    }
-    We then return a simple message verifying these toggles.
-    """
     data = request.get_json() or {}
     visual_ai = data.get('visual_ai', False)
     audio_ai = data.get('audio_ai', False)
     chat_ai = data.get('chat_ai', False)
-    notifications = data.get('notifications', False)
-
-    response_msg = f"Testing toggles: VisualAI={visual_ai}, AudioAI={audio_ai}, ChatAI={chat_ai}, Notifications={notifications}"
+    notifications_toggle = data.get('notifications', False)
+    response_msg = f"Testing toggles: VisualAI={visual_ai}, AudioAI={audio_ai}, ChatAI={chat_ai}, Notifications={notifications_toggle}"
     return jsonify({"message": response_msg})
 
+# --- New Scraper Endpoint ---
+@app.route('/api/scrape', methods=['POST'])
+@login_required()
+def scrape_chaturbate():
+    data = request.get_json() or {}
+    room_url = data.get('room_url', '').strip()
+    if not room_url:
+        return jsonify({'message': 'Room URL is required'}), 400
+    if "chaturbate.com" not in room_url:
+        return jsonify({'message': 'Invalid Chaturbate URL'}), 400
+    try:
+        response = requests.get(room_url)
+        if response.status_code != 200:
+            return jsonify({'message': 'Failed to retrieve the page'}), 400
+        soup = BeautifulSoup(response.text, 'html.parser')
+        parts = [p for p in room_url.rstrip('/').split('/') if p]
+        streamer_username = parts[-1] if parts else ''
+        page_title = soup.title.string if soup.title else ''
+        return jsonify({
+            'room_url': room_url,
+            'streamer_username': streamer_username,
+            'page_title': page_title
+        })
+    except Exception as e:
+        return jsonify({'message': f'Error scraping URL: {str(e)}'}), 500
+
+# --- Monitor stream (real AI detection) ---
 def monitor_stream(stream_url):
     while True:
-        # The real AI detection calls:
         visual_result = visual.detect(stream_url)
         audio_result = audio.detect(stream_url)
         chat_result = chat.detect(stream_url)
-
         events = []
         if visual_result:
             events.append(('visual', visual_result))
@@ -386,14 +413,12 @@ def monitor_stream(stream_url):
             events.append(('audio', audio_result))
         if chat_result:
             events.append(('chat', chat_result))
-
         for event_type, result in events:
             log = Log(stream_url=stream_url, event_type=event_type)
             db.session.add(log)
             db.session.commit()
             send_notification(f"{event_type} alert on {stream_url}: {result}")
-
-        time.sleep(10)  # Check every 10 seconds
+        time.sleep(10)
 
 def start_monitoring():
     assignments = Assignment.query.all()

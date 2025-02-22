@@ -5,4 +5,4 @@ opencv-python
 torch
 torchvision
 spacy
-
+beautifulsoup4

@@ -60,14 +60,14 @@ const Login = ({ onLogin }) => {
           max-width: 400px;
           margin: 80px auto;
           padding: 30px;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
           border-radius: 8px;
           background-color: #ffffff;
           transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
         .login-container:hover {
           transform: translateY(-5px);
-          box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+          box-shadow: 0 6px 16px rgba(0,0,0,0.15);
         }
         .login-form h2 {
           text-align: center;
@@ -94,7 +94,7 @@ const Login = ({ onLogin }) => {
         }
         .form-group input:focus {
           border-color: #007bff;
-          box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+          box-shadow: 0 0 5px rgba(0,123,255,0.5);
           outline: none;
         }
         .error-message {

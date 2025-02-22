@@ -4,7 +4,7 @@ import VideoPlayer from './VideoPlayer';
 
 const AgentDashboard = () => {
   const [dashboardData, setDashboardData] = useState({ ongoing_streams: 0, assignments: [] });
-  const [selectedStreamUrl, setSelectedStreamUrl] = useState(null);
+  const [selectedAssignment, setSelectedAssignment] = useState(null);
   
   const fetchDashboard = async () => {
     try {
@@ -46,6 +46,8 @@ const AgentDashboard = () => {
     log.event_type.toLowerCase().includes(filter.toLowerCase())
   );
 
+  const closeModal = () => setSelectedAssignment(null);
+
   return (
     <div className="agent-dashboard">
       <h2>Agent Dashboard</h2>
@@ -54,7 +56,7 @@ const AgentDashboard = () => {
         <p><strong>Ongoing Streams:</strong> {dashboardData.ongoing_streams}</p>
         <div className="assignment-grid">
           {dashboardData.assignments.map((assignment) => (
-            <div key={assignment.assignment_id} className="assignment-card" onClick={() => setSelectedStreamUrl(assignment.stream_url)}>
+            <div key={assignment.assignment_id} className="assignment-card" onClick={() => setSelectedAssignment(assignment)}>
               <video
                 src={assignment.stream_url}
                 muted
@@ -70,8 +72,6 @@ const AgentDashboard = () => {
             </div>
           ))}
         </div>
-        <h4>Stream Player</h4>
-        <VideoPlayer streamUrl={selectedStreamUrl} />
       </div>
       <div className="logs-section">
         <h3>Logs</h3>
@@ -110,6 +110,21 @@ const AgentDashboard = () => {
           <p>No logs found.</p>
         )}
       </div>
+
+      {selectedAssignment && (
+        <div className="modal-overlay" onClick={closeModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <button className="close-button" onClick={closeModal}>X</button>
+            <h3>Stream Details</h3>
+            <p><strong>Stream ID:</strong> {selectedAssignment.stream_id}</p>
+            <p><strong>Agent:</strong> {selectedAssignment.agent_username}</p>
+            <p><strong>Platform:</strong> {selectedAssignment.platform || 'Chaturbate'}</p>
+            <p><strong>Streamer:</strong> {selectedAssignment.streamer_username}</p>
+            <VideoPlayer streamUrl={selectedAssignment.stream_url} />
+          </div>
+        </div>
+      )}
+
       <style jsx>{`
         .agent-dashboard {
           max-width: 1000px;
@@ -117,7 +132,7 @@ const AgentDashboard = () => {
           padding: 20px;
           background: #fff;
           border-radius: 8px;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
           font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
         .dashboard-section {
@@ -179,6 +194,45 @@ const AgentDashboard = () => {
         }
         tr:nth-child(even) {
           background: #f9f9f9;
+        }
+        /* Modal styles */
+        .modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0,0,0,0.6);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+        }
+        .modal-content {
+          background: #fff;
+          padding: 20px;
+          border-radius: 8px;
+          max-width: 600px;
+          width: 90%;
+          position: relative;
+          animation: zoomIn 0.3s ease;
+        }
+        @keyframes zoomIn {
+          from { transform: scale(0.8); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
+        .close-button {
+          position: absolute;
+          top: 10px;
+          right: 10px;
+          background: #007bff;
+          color: #fff;
+          border: none;
+          border-radius: 50%;
+          width: 30px;
+          height: 30px;
+          cursor: pointer;
+          font-weight: bold;
         }
       `}</style>
     </div>

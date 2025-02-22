@@ -1,29 +1,28 @@
 import cv2
-import numpy as np
 import torch
+import numpy as np
 import random
-import os
+import sys
 
-loaded_model = None
+# Remove local 'models' module if present to avoid conflict with YOLOv5's repository
+if 'models' in sys.modules:
+    del sys.modules['models']
 
-def load_yolo_model():
-    global loaded_model
-    # Placeholder for real YOLO loading logic
-    # e.g.:
-    # loaded_model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
-    loaded_model = True  # Simulate a loaded model
-
-load_yolo_model()
+# Load YOLOv5 model from torch.hub (this will download the model if needed)
+model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True, trust_repo=True)
+CONF_THRESHOLD = 0.5  # confidence threshold
 
 def detect(stream_url):
-    if not loaded_model:
+    cap = cv2.VideoCapture(stream_url)
+    ret, frame = cap.read()
+    cap.release()
+    if not ret:
         return None
-
-    # Real approach: capture a frame from the stream and run YOLO inference
-    # For demonstration, simulate random detection
-    flagged_objects = ["knife", "gun", "rifle", "blade"]
-    if random.randint(0, 10) > 8:
-        obj = random.choice(flagged_objects)
-        return f"Object detected: {obj}"
+    results = model(frame)
+    detections = results.xyxy[0]
+    for *box, conf, cls in detections:
+        if conf.item() >= CONF_THRESHOLD:
+            class_name = model.names[int(cls)]
+            return f"Object detected: {class_name} (confidence: {conf.item():.2f})"
     return None
 
