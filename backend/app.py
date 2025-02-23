@@ -9,6 +9,7 @@ from datetime import timedelta
 import requests
 from bs4 import BeautifulSoup
 
+
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///monitor.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
