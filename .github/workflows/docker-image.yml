@@ -9,7 +9,7 @@ on:
       - main
 
 jobs:
-  build-and-push:
+  build:
     runs-on: ubuntu-latest
 
     steps:
@@ -25,20 +25,12 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push backend image
-        uses: docker/build-push-action@v4
-        with:
-          context: .
-          file: backend/Dockerfile
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/my_stream_monitor_backend:latest
-
-      - name: Build and push frontend image
+      - name: Build and push Docker image
         env:
           NODE_OPTIONS: --openssl-legacy-provider
         uses: docker/build-push-action@v4
         with:
-          context: ./frontend
-          file: ./frontend/Dockerfile
+          context: .
+          file: Dockerfile
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/my_stream_monitor_frontend:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/my_stream_monitor:latest
