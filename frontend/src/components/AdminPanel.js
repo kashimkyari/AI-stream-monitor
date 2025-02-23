@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import VideoPlayer from './VideoPlayer';
-import ScraperPage from './ScraperPage'; // For interactive scraping
+import ScraperPage from './ScraperPage';
+import VisualTestPage from './VisualTestPage'; // New component for visual testing
 
 const AdminPanel = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -301,6 +302,7 @@ const AdminPanel = () => {
         <button onClick={() => setActiveTab('streams')} className={activeTab === 'streams' ? 'active' : ''}>Streams</button>
         <button onClick={() => setActiveTab('flag')} className={activeTab === 'flag' ? 'active' : ''}>Flag Settings</button>
         <button onClick={() => setActiveTab('scraper')} className={activeTab === 'scraper' ? 'active' : ''}>Scraper</button>
+        <button onClick={() => setActiveTab('visual')} className={activeTab === 'visual' ? 'active' : ''}>Visual Test</button>
       </div>
 
       {activeTab === 'dashboard' && (
@@ -311,10 +313,7 @@ const AdminPanel = () => {
             <div className="assignment-grid">
               {dashboardData.streams.map((stream) => (
                 <div key={stream.stream_id} className="assignment-card" onClick={() => setSelectedAssignment(stream)}>
-                  <VideoPlayer
-                    room_url={stream.room_url}
-                    streamer_username={stream.streamer_username}
-                  />
+                  <VideoPlayer room_url={stream.room_url} streamer_username={stream.streamer_username} />
                   <div className="assignment-details">
                     <p><strong>Stream:</strong> {stream.stream_id}</p>
                     <p><strong>Agent:</strong> {stream.agent_username}</p>
@@ -525,6 +524,13 @@ const AdminPanel = () => {
         </div>
       )}
 
+      {activeTab === 'visual' && (
+        <div className="tab-content">
+          <h3>Visual Test</h3>
+          <VisualTestPage />
+        </div>
+      )}
+
       {selectedAssignment && (
         <div className="modal-overlay" onClick={closeModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -534,10 +540,7 @@ const AdminPanel = () => {
             <p><strong>Agent:</strong> {selectedAssignment.agent_username}</p>
             <p><strong>Platform:</strong> {selectedAssignment.platform || 'Chaturbate'}</p>
             <p><strong>Streamer:</strong> {selectedAssignment.streamer_username}</p>
-            <VideoPlayer
-              room_url={selectedAssignment.room_url}
-              streamer_username={selectedAssignment.streamer_username}
-            />
+            <VideoPlayer room_url={selectedAssignment.room_url} streamer_username={selectedAssignment.streamer_username} />
           </div>
         </div>
       )}

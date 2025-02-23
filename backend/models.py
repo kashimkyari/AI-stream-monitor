@@ -11,7 +11,7 @@ class User(db.Model):
 
 class Stream(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    room_url = db.Column(db.String(300), unique=True, nullable=False)  # Chaturbate (or similar) room URL
+    room_url = db.Column(db.String(300), unique=True, nullable=False)  # e.g., Chaturbate room URL
     platform = db.Column(db.String(50), default='Chaturbate')
     streamer_username = db.Column(db.String(100))  # parsed from room_url
 

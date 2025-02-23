@@ -1,25 +1,38 @@
+import os
+import sys
+import json
+import threading
+import time
 from flask import Flask, request, jsonify, session
 from urllib.parse import urlparse
 from models import db, User, Stream, Log, Assignment, ChatKeyword, FlaggedObject
 from notifications import send_notification
 from detection import visual, audio, chat
 from functools import wraps
-import threading, time
 from datetime import timedelta
 import requests
 from bs4 import BeautifulSoup
-
+from werkzeug.utils import secure_filename
+import cv2
+import base64
+import numpy as np
+from io import BytesIO
+from PIL import Image
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///monitor.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = 'supersecretkey'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
+# For file uploads in visual test (if needed)
+UPLOAD_FOLDER = 'uploads'
+ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov'}
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
 db.init_app(app)
 
 with app.app_context():
     db.create_all()
-    # Create default admin and agent if they don't exist
     if not User.query.filter_by(username='admin').first():
         admin_user = User(username='admin', password='admin', role='admin')
         db.session.add(admin_user)
@@ -27,6 +40,9 @@ with app.app_context():
         agent_user = User(username='agent', password='agent', role='agent')
         db.session.add(agent_user)
     db.session.commit()
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def login_required(role=None):
     def decorator(f):
@@ -143,7 +159,7 @@ def delete_agent(agent_id):
     db.session.commit()
     return jsonify({'message': 'Agent deleted successfully'})
 
-# --- CRUD for Streams (room URL only) ---
+# --- CRUD for Streams ---
 @app.route('/api/streams', methods=['GET'])
 @login_required(role='admin')
 def get_streams():
@@ -218,7 +234,7 @@ def delete_stream(stream_id):
     db.session.commit()
     return jsonify({'message': 'Stream deleted successfully'})
 
-# --- CRUD for Chat Keywords (unchanged) ---
+# --- CRUD for Chat Keywords ---
 @app.route('/api/keywords', methods=['GET'])
 @login_required(role='admin')
 def get_keywords():
@@ -263,7 +279,7 @@ def delete_keyword(keyword_id):
     db.session.commit()
     return jsonify({'message': 'Keyword deleted successfully'})
 
-# --- CRUD for Flagged Objects (unchanged) ---
+# --- CRUD for Flagged Objects ---
 @app.route('/api/objects', methods=['GET'])
 @login_required(role='admin')
 def get_objects():
@@ -346,17 +362,69 @@ def get_agent_dashboard():
     ongoing_streams = len(dashboard_data)
     return jsonify({"ongoing_streams": ongoing_streams, "assignments": dashboard_data})
     
-# --- Testing endpoint (optional) ---
-@app.route('/api/test', methods=['POST'])
+# --- Testing endpoint for visual detection via file upload ---
+@app.route('/api/test/visual', methods=['POST'])
 @login_required(role='admin')
-def test_features():
-    data = request.get_json() or {}
-    visual_ai = data.get('visual_ai', False)
-    audio_ai = data.get('audio_ai', False)
-    chat_ai = data.get('chat_ai', False)
-    notifications_toggle = data.get('notifications', False)
-    response_msg = f"Testing toggles: VisualAI={visual_ai}, AudioAI={audio_ai}, ChatAI={chat_ai}, Notifications={notifications_toggle}"
-    return jsonify({"message": response_msg})
+def test_visual():
+    if 'video' not in request.files:
+        return jsonify({'message': 'No video file provided'}), 400
+    file = request.files['video']
+    if file.filename == '':
+        return jsonify({'message': 'No selected file'}), 400
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        file.save(file_path)
+        cap = cv2.VideoCapture(file_path)
+        ret, frame = cap.read()
+        cap.release()
+        if not ret:
+            return jsonify({'message': 'Could not read video file'}), 400
+        threshold = float(request.args.get('threshold', 0.5))
+        visual.CONF_THRESHOLD = threshold
+        results = visual.detect_frame(frame)
+        os.remove(file_path)
+        return jsonify({'results': results})
+    else:
+        return jsonify({'message': 'Invalid file format'}), 400
+
+# --- New endpoint for frame-based visual detection ---
+@app.route('/api/test/visual/frame', methods=['POST'])
+@login_required(role='admin')
+def test_visual_frame():
+    if 'frame' not in request.files:
+        return jsonify({'message': 'No frame file provided'}), 400
+    file = request.files['frame']
+    if file.filename == '':
+        return jsonify({'message': 'No selected file'}), 400
+    try:
+        image = Image.open(file.stream).convert('RGB')
+        frame = np.array(image)
+        results = visual.detect_frame(frame)
+        return jsonify({'results': results})
+    except Exception as e:
+        return jsonify({'message': f'Error processing frame: {str(e)}'}), 500
+
+# --- New endpoint for real-time visual detection using a hardcoded video ---
+@app.route('/api/test/visual/stream', methods=['GET'])
+@login_required(role='admin')
+def stream_visual():
+    def generate():
+        cap = cv2.VideoCapture("/home/pc/Downloads/2025-02-22_16-56-53.mp4")
+        if not cap.isOpened():
+            yield "data: " + json.dumps({"error": "Could not open video file"}) + "\n\n"
+            return
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                continue
+            results = visual.detect_frame(frame)
+            yield "data: " + json.dumps(results) + "\n\n"
+            time.sleep(0.5)
+        cap.release()
+    return app.response_class(generate(), mimetype='text/event-stream')
 
 # --- Scraper Endpoint ---
 @app.route('/api/scrape', methods=['POST'])
@@ -386,23 +454,24 @@ def scrape_chaturbate():
 
 # --- Monitor stream (AI detection) ---
 def monitor_stream(stream_url):
-    while True:
-        visual_result = visual.detect(stream_url)
-        audio_result = audio.detect(stream_url)
-        chat_result = chat.detect(stream_url)
-        events = []
-        if visual_result:
-            events.append(('visual', visual_result))
-        if audio_result:
-            events.append(('audio', audio_result))
-        if chat_result:
-            events.append(('chat', chat_result))
-        for event_type, result in events:
-            log = Log(room_url=stream_url, event_type=event_type)
-            db.session.add(log)
-            db.session.commit()
-            send_notification(f"{event_type} alert on {stream_url}: {result}")
-        time.sleep(10)
+    with app.app_context():
+        while True:
+            visual_result = visual.detect(stream_url)
+            audio_result = audio.detect(stream_url)
+            chat_result = chat.detect(stream_url)
+            events = []
+            if visual_result:
+                events.append(('visual', visual_result))
+            if audio_result:
+                events.append(('audio', audio_result))
+            if chat_result:
+                events.append(('chat', chat_result))
+            for event_type, result in events:
+                log = Log(room_url=stream_url, event_type=event_type)
+                db.session.add(log)
+                db.session.commit()
+                send_notification(f"{event_type} alert on {stream_url}: {result}")
+            time.sleep(10)
 
 def start_monitoring():
     assignments = Assignment.query.all()
