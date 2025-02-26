@@ -6,3 +6,8 @@ torch
 torchvision
 spacy
 beautifulsoup4
+numpy
+yt_dlp
+vosk
+pandas
+

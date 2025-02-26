@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import NavBar from './components/NavBar';
 import Login from './components/Login';
 import AdminPanel from './components/AdminPanel';
 import AgentDashboard from './components/AgentDashboard';
 
 function App() {
   const [role, setRole] = useState(null);
+  const [activeTab, setActiveTab] = useState('dashboard');
 
   const checkSession = async () => {
     try {
@@ -37,17 +39,19 @@ function App() {
 
   return (
     <div>
-      {role && (
-        <header style={{ padding: "10px", textAlign: "right", background: "#eee" }}>
-          <button onClick={handleLogout}>Logout</button>
-        </header>
+      {role ? (
+        <>
+          <NavBar activeTab={activeTab} setActiveTab={setActiveTab} handleLogout={handleLogout} />
+          <div style={{ paddingTop: "70px" }}>
+            {role === 'admin' && <AdminPanel activeTab={activeTab} />}
+            {role === 'agent' && <AgentDashboard />}
+          </div>
+        </>
+      ) : (
+        <Login onLogin={handleLogin} />
       )}
-      {!role && <Login onLogin={handleLogin} />}
-      {role === 'admin' && <AdminPanel />}
-      {role === 'agent' && <AgentDashboard />}
     </div>
   );
 }
 
 export default App;
-

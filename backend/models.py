@@ -35,4 +35,3 @@ class ChatKeyword(db.Model):
 class FlaggedObject(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     object_name = db.Column(db.String(100), unique=True, nullable=False)
-

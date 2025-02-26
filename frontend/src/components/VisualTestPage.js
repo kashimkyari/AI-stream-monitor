@@ -1,109 +1,116 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
 const VisualTestPage = () => {
-  const [videoFile, setVideoFile] = useState(null);
-  const [videoURL, setVideoURL] = useState(null);
-  const [detections, setDetections] = useState([]);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [videoUrl, setVideoUrl] = useState('');
+  const [galleryUrl, setGalleryUrl] = useState('');
+  const [audioFlagsUrl, setAudioFlagsUrl] = useState('');
+  const [thumbnails, setThumbnails] = useState([]);
+  const [audioFlags, setAudioFlags] = useState({});
   const [error, setError] = useState('');
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const intervalRef = useRef(null);
 
-  // Handle file selection and set video URL for playback
   const handleFileChange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      setVideoFile(e.target.files[0]);
-      setVideoURL(URL.createObjectURL(e.target.files[0]));
+    setSelectedFile(e.target.files[0]);
+  };
+
+  const handleUpload = async () => {
+    if (!selectedFile) {
+      setError('Please select a video file.');
+      return;
+    }
+    setError('');
+    const formData = new FormData();
+    formData.append('video', selectedFile);
+    try {
+      const res = await axios.post('/api/test/visual/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setVideoUrl(res.data.video_url);
+      setGalleryUrl(res.data.gallery_url);
+      setAudioFlagsUrl(res.data.audio_flags_url);
+      pollThumbnails(res.data.gallery_url);
+      pollAudioFlags(res.data.audio_flags_url);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Error uploading file.');
     }
   };
 
-  // Capture current frame from video and send for detection
-  const captureFrameAndDetect = async () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob(async (blob) => {
-      if (!blob) return;
-      const formData = new FormData();
-      formData.append('frame', blob, 'frame.jpg');
+  const pollThumbnails = (galleryEndpoint) => {
+    const intervalId = setInterval(async () => {
       try {
-        const res = await axios.post('/api/test/visual/frame', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
-        });
-        setDetections(res.data.results);
+        const res = await axios.get(galleryEndpoint);
+        setThumbnails(res.data.thumbnails);
       } catch (err) {
-        console.error("Detection error:", err);
+        console.error('Error polling thumbnails:', err);
       }
-    }, 'image/jpeg');
+    }, 2000);
+    return () => clearInterval(intervalId);
   };
 
-  // Start capturing frames when video plays
-  const startDetection = () => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    intervalRef.current = setInterval(captureFrameAndDetect, 1000); // capture every second
+  const pollAudioFlags = (audioEndpoint) => {
+    const intervalId = setInterval(async () => {
+      try {
+        const res = await axios.get(audioEndpoint);
+        setAudioFlags(res.data.audio_flags);
+      } catch (err) {
+        console.error('Error polling audio flags:', err);
+      }
+    }, 2000);
+    return () => clearInterval(intervalId);
   };
-
-  // Stop capturing frames when video is paused or ended
-  const stopDetection = () => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      if (videoURL) URL.revokeObjectURL(videoURL);
-    };
-  }, [videoURL]);
 
   return (
     <div className="visual-test-page">
-      <h2>Real-Time Visual Detection Test</h2>
-      <div>
+      <h2>Real-Time Visual & Audio Detection Test</h2>
+      <p>
+        Upload a video to see real-time object detection and transcription. The video will play normally below, and a gallery of unique detected objects (with video and real-world timestamps) will update dynamically. Any flagged audio keywords are also listed.
+      </p>
+      <div className="upload-form">
         <input type="file" accept="video/*" onChange={handleFileChange} />
+        <button onClick={handleUpload}>Upload and Test</button>
       </div>
-      {videoURL && (
-        <div className="video-container">
-          <video
-            ref={videoRef}
-            src={videoURL}
-            controls
-            onPlay={startDetection}
-            onPause={stopDetection}
-            onEnded={stopDetection}
-            style={{ width: "100%" }}
-          />
-          {/* Hidden canvas for frame capture */}
-          <canvas ref={canvasRef} style={{ display: "none" }} />
+      {error && <p className="error">{error}</p>}
+      {videoUrl && (
+        <div className="video-player">
+          <video width="640" height="360" controls>
+            <source src={videoUrl} type="video/mp4" />
+            Your browser does not support the video tag.
+          </video>
         </div>
       )}
-      {error && <p className="error">{error}</p>}
-      <div className="detections">
-        <h3>Detection Results:</h3>
-        {detections && detections.length > 0 ? (
+      {thumbnails.length > 0 && (
+        <div className="gallery">
+          <h3>Detected Objects Gallery</h3>
+          <div className="thumbs">
+            {thumbnails.map((thumb, index) => (
+              <div key={index} className="thumb-item">
+                <img src={thumb.thumb_url} alt={`${thumb.class} detected`} />
+                <div className="thumb-info">
+                  <p>{thumb.class}</p>
+                  <p>Video: {thumb.video_timestamp.toFixed(2)} s</p>
+                  <p>{thumb.realworld_timestamp}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {Object.keys(audioFlags).length > 0 && (
+        <div className="audio-flags">
+          <h3>Flagged Audio Transcriptions</h3>
           <ul>
-            {detections.map((det, index) => (
+            {Object.entries(audioFlags).map(([keyword, details], index) => (
               <li key={index}>
-                <strong>Class:</strong> {det.class} | <strong>Confidence:</strong> {(det.confidence * 100).toFixed(2)}%
+                <strong>{keyword}:</strong> "{details.phrase}" at {details.audio_timestamp.toFixed(2)} s ({details.realworld_timestamp})
               </li>
             ))}
           </ul>
-        ) : (
-          <p>No detections yet...</p>
-        )}
-      </div>
+        </div>
+      )}
       <style jsx>{`
         .visual-test-page {
-          max-width: 600px;
+          max-width: 800px;
           margin: 40px auto;
           padding: 20px;
           background: #fff;
@@ -111,14 +118,66 @@ const VisualTestPage = () => {
           box-shadow: 0 4px 12px rgba(0,0,0,0.1);
           font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
-        .video-container {
+        .upload-form {
+          display: flex;
+          gap: 10px;
+          margin-bottom: 20px;
+          align-items: center;
+        }
+        input[type='file'] {
+          flex: 1;
+        }
+        button {
+          padding: 10px 20px;
+          background: #007bff;
+          color: #fff;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+          transition: background 0.3s ease;
+        }
+        button:hover {
+          background: #0056b3;
+        }
+        .video-player {
           margin-top: 20px;
         }
-        .detections {
+        .gallery {
           margin-top: 20px;
-          background: #f8f8f8;
+        }
+        .thumbs {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+        }
+        .thumb-item {
+          width: 120px;
+          text-align: center;
+        }
+        .thumb-item img {
+          width: 100px;
+          height: 100px;
+          object-fit: cover;
+          border: 1px solid #ccc;
+          border-radius: 4px;
+        }
+        .thumb-info {
+          font-size: 10px;
+          margin-top: 5px;
+        }
+        .audio-flags {
+          margin-top: 20px;
+          background: #f9f9f9;
           padding: 10px;
           border-radius: 4px;
+        }
+        .audio-flags ul {
+          list-style-type: none;
+          padding: 0;
+        }
+        .audio-flags li {
+          margin: 5px 0;
+          font-size: 12px;
         }
         .error {
           color: #d9534f;
@@ -131,4 +190,3 @@ const VisualTestPage = () => {
 };
 
 export default VisualTestPage;
-

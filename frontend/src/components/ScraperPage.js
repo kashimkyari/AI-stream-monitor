@@ -95,7 +95,7 @@ const ScraperPage = () => {
           padding: 20px;
           background: #fff;
           border-radius: 8px;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
           font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
           animation: fadeIn 0.5s ease-in-out;
         }
@@ -159,4 +159,3 @@ const ScraperPage = () => {
 };
 
 export default ScraperPage;
-
