@@ -43,9 +43,10 @@ flagged_keywords = []
 def update_flagged_keywords():
     global flagged_keywords
     with app.app_context():
+        db.create_all()
+        update_flagged_keywords()
         keywords = ChatKeyword.query.all()
         flagged_keywords = [kw.keyword for kw in keywords]
-update_flagged_keywords()
 
 # Initialize Vosk model (ensure you have a Vosk model folder named "model" in your project directory)
 vosk_model = VoskModel("model")
